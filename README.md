@@ -85,6 +85,8 @@ resource "aws_iam_role_policy_attachment" "s3_policy" {
 }
 ---
 
+```
+
 ## ⚙️ Step 2: Python Script with Boto3
 
 We’ll create a Python script that:
@@ -142,3 +144,119 @@ if __name__ == "__main__":
     bucket = sys.argv[1]
     key = sys.argv[2]
     translate_text(bucket, key)
+---
+
+## ⚙️ Step 3: Automate with AWS Lambda
+
+We’ll wrap the translation logic inside an **AWS Lambda function** that is triggered automatically whenever a file is uploaded to the **request S3 bucket**.
+
+### Code: `lambda_function.py`
+```python
+import boto3
+import json
+
+s3 = boto3.client("s3")
+translate = boto3.client("translate")
+
+def lambda_handler(event, context):
+    try:
+        # Extract S3 event details
+        bucket = event["Records"][0]["s3"]["bucket"]["name"]
+        key = event["Records"][0]["s3"]["object"]["key"]
+
+        # Read input JSON
+        obj = s3.get_object(Bucket=bucket, Key=key)
+        data = json.loads(obj["Body"].read())
+
+        source_text = data.get("text", "")
+        source_lang = data.get("source_language", "en")
+        target_lang = data.get("target_language", "fr")
+
+        # Call AWS Translate
+        result = translate.translate_text(
+            Text=source_text,
+            SourceLanguageCode=source_lang,
+            TargetLanguageCode=target_lang
+        )
+
+        translated_text = result["TranslatedText"]
+
+        # Save translated output to response bucket
+        output_data = {
+            "original_text": source_text,
+            "translated_text": translated_text,
+            "source_language": source_lang,
+            "target_language": target_lang
+        }
+
+        output_key = key.replace(".json", "_translated.json")
+        s3.put_object(
+            Bucket="translate-response-bucket-demo",
+            Key=output_key,
+            Body=json.dumps(output_data)
+        )
+
+        return {"status": "success", "output_key": output_key}
+
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+---
+
+## 🔧 Lambda Setup Guide
+
+### 1. Package the Function
+Run the following command to compress your Lambda function code:
+```bash
+zip function.zip lambda_function.py
+---
+
+```
+
+## 📥 Example Request (Input JSON)
+
+This file is uploaded into the **request bucket** (e.g., `request-bucket-translate-demo`):
+
+```json
+{
+  "SourceLanguageCode": "en",
+  "TargetLanguageCode": "fr",
+  "Text": "Hello, how are you doing today?"
+}
+
+```
+
+---
+
+## 📤 Example Response (Output JSON)
+
+When the Lambda function completes, it generates this response in the **response bucket**:
+
+```json
+{
+  "SourceLanguageCode": "en",
+  "TargetLanguageCode": "fr",
+  "OriginalText": "Hello, how are you doing today?",
+  "TranslatedText": "Bonjour, comment allez-vous aujourd'hui?"
+}
+---
+
+```
+
+## ✅ Conclusion
+
+This project demonstrates how to integrate **AWS S3**, **AWS Lambda**, and **Amazon Translate** into an automated translation pipeline.  
+By simply uploading a JSON request file to an S3 bucket, translations are automatically processed and saved into a response bucket, removing the need for manual intervention.  
+
+This solution is:  
+- ⚡ **Serverless and scalable** using AWS Lambda  
+- 🔒 **Secure** with IAM role-based permissions  
+- 🔁 **Automated** with S3 event triggers  
+- 🌍 **Versatile** for translating text across multiple languages  
+
+Special thanks for exploring this project! 🚀  
+
+If you found this useful, feel free to ⭐ the repo and share your feedback.  
+For questions or contributions, reach out via **[Safoa4u@gmail.com](mailto:Safoa4u@gmail.com)**.  
+
+---
+
